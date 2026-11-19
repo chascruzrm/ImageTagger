@@ -1,2 +1,14 @@
-﻿Pillow>=10.0
-pydantic>=2.0
+﻿# Dependencias de terceros de ImageTagger (versiones exactas probadas con
+# Python 3.13.5 en Windows 11 de 64 bits). tkinter viene incluido con Python.
+
+# Lectura, rotación y escalado de imágenes (JPG, PNG, GIF) y su muestra en tkinter.
+Pillow==13.0.0
+
+# Modelo de datos Persona: validación y lectura/escritura de los JSON.
+pydantic==2.14.3
+
+# Dependencias de pydantic (fijadas para que la instalación sea reproducible).
+pydantic-core==2.50.4
+annotated-types==0.8.0
+typing-extensions==4.16.0
+typing-inspection==0.4.5
