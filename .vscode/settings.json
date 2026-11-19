@@ -1,0 +1,4 @@
+{
+    // Code Runner: ejecutar en la terminal integrada (permite Ctrl+C y entrada por teclado).
+    "code-runner.runInTerminal": true
+}

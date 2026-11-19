@@ -1,0 +1,9 @@
+# Imágenes procesadas y sus datos
+database/
+descartados/
+
+# Configuración local (copiar config.example.ini a config.ini)
+config.ini
+
+# Python
+__pycache__/
