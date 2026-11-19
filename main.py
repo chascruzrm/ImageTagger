@@ -8,22 +8,26 @@ los archivos detectados en una cola y el thread principal (que corre el mainloop
 de Tk) la revisa periódicamente y llama a nuevo_archivo_detectado().
 """
 
-VERSION = "1.0.2 - 2026-11-18"
+VERSION = "1.0.3 - 2026-11-18"
 AUTOR = "Roberto Marcelo Chas Cruz"
 EMAIL = "chascruzrm2@gmail.com"
 LICENCE = "GPLv3"
 TITULO_APLICACION = f"ImageTagger v. {VERSION} - {AUTOR} - {EMAIL}"
 
 import configparser
+import logging
 import os
 import queue
 import signal
 import sys
+from typing import NoReturn
 
-from app_config import leer_directorio_monitoreo
+from app_config import ARCHIVO_LOG, configurar_log, leer_directorio_monitoreo
 from filesystem_service import MonitorDirectorio, nuevo_archivo_detectado
 from gallery import Galeria
 from persona_editor import VentanaImagen
+
+log = logging.getLogger("main")
 
 
 # --------------------------------------------------------------------------- #
@@ -42,16 +46,37 @@ def salir(root):
     root.quit()
 
 
+def error_de_inicio(mensaje) -> NoReturn:
+    """Informa un error que impide iniciar y termina el programa.
+
+    Se registra en el log y se muestra en un cuadro de diálogo porque,
+    ejecutado con pythonw (sin consola), lo que se imprime no lo ve nadie.
+    """
+    log.error("No se pudo iniciar: %s", " ".join(mensaje.split()))
+    try:
+        import tkinter as tk
+        from tkinter import messagebox
+        raiz = tk.Tk()
+        raiz.withdraw()
+        messagebox.showerror(TITULO_APLICACION, mensaje, parent=raiz)
+        raiz.destroy()
+    except Exception:
+        pass
+    sys.exit(1)
+
+
 def main():
+    configurar_log()
+    log.info("Iniciando ImageTagger v. %s (Python %s, %s)", VERSION,
+             sys.version.split()[0], os.path.basename(sys.executable))
     # Un argumento en la línea de comandos tiene prioridad sobre config.ini.
     try:
         directorio = sys.argv[1] if len(sys.argv) > 1 else leer_directorio_monitoreo()
     except (ValueError, configparser.Error) as e:
-        print(f"Error de configuración: {e}", file=sys.stderr)
-        sys.exit(1)
+        error_de_inicio(f"Error de configuración:\n\n{e}")
     if not os.path.isdir(directorio):
-        print(f"El directorio a monitorear no existe: {directorio}", file=sys.stderr)
-        sys.exit(1)
+        error_de_inicio(f"El directorio a monitorear no existe:\n\n{directorio}\n\n"
+                        "Revise 'directorio_monitoreo' en config.ini.")
 
     # La galería es la ventana principal; las de cada imagen se abren como hijas.
     root = Galeria()
@@ -74,23 +99,24 @@ def main():
                 try:
                     nuevo_archivo_detectado(
                         archivos, lambda ruta: VentanaImagen(root, ruta))
-                except Exception as e:
-                    print(f"Error en nuevo_archivo_detectado: {e}", file=sys.stderr)
+                except Exception:
+                    log.exception("Error al abrir los archivos nuevos %s", archivos)
         finally:
             root.after(100, procesar_cola)
 
     root.after(100, procesar_cola)
-    # Ctrl+C: Tk atrapa KeyboardInterrupt dentro de los callbacks, así que se
-    # usa un manejador de señal que termina el mainloop.
+    # Ctrl+C (solo si se ejecuta con python desde una consola): Tk atrapa
+    # KeyboardInterrupt dentro de los callbacks, así que se usa un manejador
+    # de señal que termina el mainloop.
     signal.signal(signal.SIGINT, lambda *_: root.quit())
 
-    print(f"Monitoreando '{os.path.abspath(directorio)}' (Ctrl+C para salir)...")
+    log.info("Monitoreando %s (log: %s)", os.path.abspath(directorio), ARCHIVO_LOG)
     root.mainloop()
 
     monitor.detener()
     monitor.join()
     root.destroy()
-    print("Monitor detenido.")
+    log.info("ImageTagger cerrado")
 
 
 if __name__ == "__main__":

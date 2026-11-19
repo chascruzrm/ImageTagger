@@ -1,6 +1,7 @@
 """Galería: lista las personas guardadas en la carpeta database y muestra la
 imagen y los datos de la seleccionada."""
 
+import logging
 import os
 import unicodedata
 from dataclasses import dataclass
@@ -11,9 +12,12 @@ from tkinter import messagebox
 from PIL import Image, ImageOps, ImageTk
 from pydantic import ValidationError
 
-from app_config import DIRECTORIO_DATABASE, EVENTO_DATABASE_MODIFICADA, configurar_fuentes
+from app_config import (ARCHIVO_LOG, DIRECTORIO_DATABASE, EVENTO_DATABASE_MODIFICADA,
+                        configurar_fuentes, configurar_log)
 from models import Persona
 from persona_editor import VentanaImagen
+
+log = logging.getLogger(__name__)
 
 ANCHO_VENTANA = 1000
 ALTO_VENTANA = 900
@@ -122,6 +126,19 @@ class Galeria(tk.Tk):
         self.actualizar()
         self.bind(EVENTO_DATABASE_MODIFICADA, lambda e: self.actualizar())
 
+    def report_callback_exception(self, tipo, valor, traza):
+        """Errores no controlados en cualquier ventana de la aplicación (Tk los
+        informa a la ventana raíz, que es la galería): se registran en el log
+        y se avisan al usuario."""
+        log.error("Error no controlado en la interfaz", exc_info=(tipo, valor, traza))
+        try:
+            messagebox.showerror("Error inesperado",
+                                 f"Ocurrió un error inesperado:\n\n{valor}\n\n"
+                                 f"Los detalles se guardaron en {ARCHIVO_LOG}",
+                                 parent=self)
+        except tk.TclError:  # la aplicación se está cerrando
+            pass
+
     # ----------------------------------------------------------- interfaz --
 
     def _construir(self):
@@ -216,6 +233,8 @@ class Galeria(tk.Tk):
         self._registros, errores = cargar_registros(DIRECTORIO_DATABASE)
         self._filtrar(recargar_detalle=True)
         if errores:
+            for error in errores:
+                log.warning("No se pudo leer un archivo de database: %s", error)
             mas = f"\n... y {len(errores) - 10} más." if len(errores) > 10 else ""
             messagebox.showwarning("Archivos con errores",
                                    f"No se pudieron leer {len(errores)} archivo(s):\n\n"
@@ -348,6 +367,7 @@ class Galeria(tk.Tk):
                 return
 
         if not os.path.isfile(ruta_imagen):
+            log.warning("Editar: no se encontró la imagen %s", ruta_imagen)
             messagebox.showerror("Error", f"No se encontró la imagen {ruta_imagen}.",
                                  parent=self)
             return
@@ -356,12 +376,14 @@ class Galeria(tk.Tk):
             with open(ruta_json, encoding="utf-8") as f:
                 persona = Persona.model_validate_json(f.read())
         except (OSError, UnicodeDecodeError, ValidationError) as e:
+            log.warning("Editar: no se pudo leer %s: %s", ruta_json, e)
             messagebox.showerror("Error", f"No se pudo leer {ruta_json}.\n\n{e}", parent=self)
             return
         VentanaImagen(self, ruta_imagen, persona)
 
 
 def main():
+    configurar_log()
     app = Galeria()
     app.mainloop()
 

@@ -2,7 +2,7 @@
 
 Aplicación de escritorio para **identificar a las personas que aparecen en imágenes**. Vigila una carpeta (por ejemplo, la de capturas de pantalla o la de fotos de una cámara) y, cada vez que aparece una imagen nueva, abre una ventana para cargar los datos de la persona: apellido, nombre, documento y notas. Las imágenes etiquetadas se archivan junto con sus datos y se pueden buscar, consultar y editar desde una galería.
 
-**Versión actual:** 1.0.0 - 2026-11-18 (constante `VERSION` de `main.py`)
+**Versión actual:** 1.0.3 - 2026-11-18 (constante `VERSION` de `main.py`)
 
 ---
 
@@ -16,10 +16,11 @@ Aplicación de escritorio para **identificar a las personas que aparecen en imá
 6. [Ejecución](#ejecución)
 7. [Uso](#uso)
 8. [Archivos y carpetas que genera](#archivos-y-carpetas-que-genera)
-9. [Estructura del proyecto](#estructura-del-proyecto)
-10. [Limitaciones conocidas](#limitaciones-conocidas)
-11. [Solución de problemas](#solución-de-problemas)
-12. [Autor y licencia](#autor-y-licencia)
+9. [Registro de errores (log)](#registro-de-errores-log)
+10. [Estructura del proyecto](#estructura-del-proyecto)
+11. [Limitaciones conocidas](#limitaciones-conocidas)
+12. [Solución de problemas](#solución-de-problemas)
+13. [Autor y licencia](#autor-y-licencia)
 
 ---
 
@@ -141,7 +142,7 @@ Notas:
 
 - El archivo puede guardarse con el Bloc de notas; se acepta UTF-8 con o sin BOM.
 - Las líneas que empiezan con `;` son comentarios.
-- Si falta el archivo, la clave o la carpeta, la aplicación muestra el error en la consola y no arranca.
+- Si falta el archivo, la clave o la carpeta, la aplicación muestra el error en un cuadro de diálogo y no arranca.
 
 ## Ejecución
 
@@ -153,9 +154,10 @@ Doble clic en **`iniciar.bat`**, o desde una consola:
 iniciar.bat
 ```
 
-- Usa automáticamente el Python de `.venv` si existe; si no, el que esté en el `PATH`. No hace falta activar el entorno virtual antes.
+- Usa automáticamente el `pythonw` de `.venv` si existe; si no, el que esté en el `PATH`. No hace falta activar el entorno virtual antes.
 - Funciona desde cualquier carpeta, porque se ubica en la carpeta del proyecto.
-- Abre una consola que muestra qué carpeta se está monitoreando. Si la aplicación termina con un error, la consola queda abierta para poder leerlo.
+- Ejecuta la aplicación con `pythonw`, sin consola: la ventana del `.bat` se cierra enseguida y queda solo la galería.
+- Los errores de inicio, como la falta de `config.ini` o una carpeta que no existe, se muestran en un cuadro de diálogo.
 
 Para monitorear otra carpeta sin tocar `config.ini`, pásela como argumento. Tiene prioridad sobre `config.ini`:
 
@@ -172,6 +174,8 @@ python main.py
 python main.py "D:\Fotos\Pendientes"
 ```
 
+Con `python` en lugar de `pythonw`, la consola queda abierta, muestra qué carpeta se monitorea y permite cerrar con Ctrl+C. Es útil para depurar, porque ahí se ven los errores internos.
+
 La galería también puede abrirse sola, sin monitorear ninguna carpeta, para consultar `database`:
 
 ```bat
@@ -181,11 +185,11 @@ python gallery.py
 ### Cerrar la aplicación
 
 - Cerrando la ventana de la galería. Antes se cierra cada editor abierto, y si alguno tiene datos sin guardar, se pregunta qué hacer. Si se elige **Cancelar**, la aplicación sigue abierta.
-- Con **Ctrl+C** en la consola: cierra todo de inmediato, sin preguntar.
+- Solo si se ejecutó con `python main.py` desde una consola: con **Ctrl+C** en esa consola, que cierra todo de inmediato, sin preguntar.
 
 ### Desde Visual Studio Code
 
-El proyecto incluye `.vscode/settings.json` con `"code-runner.runInTerminal": true`. Así, al ejecutar `iniciar.bat` con la extensión *Code Runner*, la aplicación corre en la terminal integrada, donde se ve la salida y funciona Ctrl+C.
+El proyecto incluye `.vscode/settings.json` con `"code-runner.runInTerminal": true`, para que la extensión *Code Runner* ejecute en la terminal integrada. Para depurar, conviene ejecutar `main.py` con `python`, porque así se ven en la terminal los mensajes y los errores internos.
 
 ## Uso
 
@@ -236,6 +240,7 @@ Las dos carpetas se crean automáticamente junto a `main.py` cuando hacen falta,
 |---|---|
 | `database/` | Imágenes etiquetadas y sus datos |
 | `descartados/` | Imágenes descartadas, con su JSON si lo tenían |
+| `logs/` | Registro de la aplicación (`imagetagger.log`); ver [Registro de errores](#registro-de-errores-log) |
 
 **Nombre del archivo de datos:** es el nombre de la imagen con `.json` agregado, conservando la extensión original: `foto.jpg` → `foto.jpg.json`.
 
@@ -253,6 +258,32 @@ Ejemplo de JSON, guardado en UTF-8 y compatible con el modelo `Persona`:
 }
 ```
 
+## Registro de errores (log)
+
+Como la aplicación corre sin consola (`pythonw`), los errores y los eventos principales se guardan en **`logs/imagetagger.log`**, junto a `main.py`. El archivo usa UTF-8.
+
+Se registra:
+
+| Nivel | Qué |
+|---|---|
+| INFO | Inicio y cierre (con versión de la aplicación y de Python), carpeta monitoreada, archivos nuevos detectados, imágenes guardadas y descartadas, y avisos de validación al guardar (por ejemplo, nombre vacío). |
+| WARNING | Imágenes que no se pueden abrir y archivos de `database` que no se pueden leer. |
+| ERROR | Errores al guardar o mover archivos, errores de inicio (configuración), carpeta monitoreada inaccesible y errores inesperados, con el detalle técnico (traceback). |
+
+- Ante un error inesperado, la aplicación muestra un aviso que indica la ruta del log.
+- Si la carpeta monitoreada deja de estar accesible, el error se registra una sola vez y no cada segundo; cuando vuelve a estar disponible, también queda registrado.
+- El archivo rota al llegar a 1 MB: se conservan los 3 anteriores (`imagetagger.log.1` a `.3`) y se descartan los más viejos.
+- Ejecutando con `python main.py` desde una consola, los mismos mensajes se ven también en la consola.
+
+Ejemplo:
+
+```
+2026-11-18 22:41:07,512 INFO     [MainThread] main: Iniciando ImageTagger v. 1.0.2 - 2026-11-18 (Python 3.13.5, pythonw.exe)
+2026-11-18 22:41:07,840 INFO     [MainThread] main: Monitoreando C:\Users\usuario\Pictures\Screenshots (log: ...\logs\imagetagger.log)
+2026-11-18 22:41:10,103 INFO     [MonitorDirectorio] filesystem_service: Archivos nuevos: foto.jpg
+2026-11-18 22:41:31,977 INFO     [MainThread] persona_editor: Guardado: ...\database\foto.jpg (...\database\foto.jpg.json)
+```
+
 ## Estructura del proyecto
 
 | Archivo | Contenido |
@@ -262,7 +293,7 @@ Ejemplo de JSON, guardado en UTF-8 y compatible con el modelo `Persona`:
 | `persona_editor.py` | Editor de los datos de una imagen y el diálogo de cambios sin guardar. |
 | `filesystem_service.py` | Monitoreo de la carpeta, nombres disponibles y movimiento de archivos. |
 | `models.py` | Modelo `Persona` (pydantic) con sus validaciones. |
-| `app_config.py` | Rutas (`database`, `descartados`, `config.ini`), lectura de la configuración y fuente por defecto (Arial 12). |
+| `app_config.py` | Rutas (`database`, `descartados`, `logs`, `config.ini`), lectura de la configuración, configuración del log y fuente por defecto (Arial 12). |
 | `iniciar.bat` | Lanzador para Windows. |
 | `config.example.ini` | Plantilla de configuración. |
 | `requirements.txt` | Dependencias con versiones exactas. |
@@ -284,6 +315,7 @@ Ejemplo de JSON, guardado en UTF-8 y compatible con el modelo `Persona`:
 | `El directorio a monitorear no existe` | Revise `directorio_monitoreo` en `config.ini`. |
 | `ModuleNotFoundError: No module named 'PIL'` o `'pydantic'` | Faltan las dependencias: siga los pasos de [Instalación](#instalación). Si usa `python main.py`, active antes el entorno virtual. |
 | `No se encontro Python` al usar `iniciar.bat` | Instale Python 3.13 o cree el entorno `.venv`. |
+| La aplicación no abre, falla o se comporta de forma extraña | Revise `logs/imagetagger.log`. Si no alcanza, ejecute `python main.py` desde una consola, con el entorno activado, para ver los mensajes en el momento. |
 | Las imágenes que ya estaban en la carpeta no se abren | Se abren al iniciar. Si había otra instancia abierta, ciérrela y vuelva a iniciar. |
 | No se ve ninguna ventana nueva | Revise la barra de tareas: Windows a veces deja una ventana nueva detrás de otra aplicación. |
 | VS Code (Pylance) marca errores que no aparecen al ejecutar | Ejecute *Python: Restart Language Server* desde la paleta de comandos (Ctrl+Shift+P). |

@@ -1,5 +1,6 @@
 """Editor de los datos de la persona de una imagen (VentanaImagen) y diálogos relacionados."""
 
+import logging
 import os
 import tkinter as tk
 from tkinter import messagebox
@@ -10,6 +11,8 @@ from pydantic import ValidationError
 from app_config import DIRECTORIO_DATABASE, DIRECTORIO_DESCARTADOS, EVENTO_DATABASE_MODIFICADA
 from filesystem_service import mover_a_directorio, mover_archivo, obtener_ruta_disponible
 from models import MAX_BYTES_NOTAS, MAX_CARACTERES, Persona
+
+log = logging.getLogger(__name__)
 
 # Tamaño inicial del cuadro de imagen. Al abrir la ventana, el cuadro se ajusta
 # para ocupar todo el espacio libre de la ventana maximizada, y queda fijo.
@@ -201,7 +204,13 @@ class VentanaImagen(tk.Toplevel):
         self._al_modificar()
 
     def _error(self, titulo, mensaje, advertencia=False):
-        """Muestra el error en un diálogo modal y lo deja en lblEstado."""
+        """Muestra el error en un diálogo modal, lo deja en lblEstado y lo
+        registra en el log (las advertencias de validación, como información)."""
+        texto_log = f"{os.path.basename(self.ruta)}: {titulo}: {' '.join(mensaje.split())}"
+        if advertencia:
+            log.info(texto_log)
+        else:
+            log.error(texto_log)
         self._poner_estado(mensaje, COLOR_ESTADO_ERROR)
         if advertencia:
             messagebox.showwarning(titulo, mensaje, parent=self)
@@ -320,6 +329,7 @@ class VentanaImagen(tk.Toplevel):
             # muestra sobre la ventana que queda al frente. Si el error tuviera
             # como dueña a esta ventana invisible, quedaría oculto pero
             # capturando el teclado (cada tecla sonaría como un beep).
+            log.warning("No se puede mostrar la imagen %s", self.ruta, exc_info=True)
             padre = self.master
             self.destroy()
             messagebox.showerror("Error", f"No se puede mostrar la imagen {self.ruta}.",
@@ -412,6 +422,7 @@ class VentanaImagen(tk.Toplevel):
             self.title(os.path.basename(self.ruta))
 
         self._guardado = self._valores_actuales()
+        log.info("Guardado: %s (%s)", self.ruta, ruta_json)
         self._poner_estado("Datos guardados correctamente.", COLOR_ESTADO_OK)
         self._avisar_database_modificada()
         return True
@@ -543,13 +554,14 @@ class VentanaImagen(tk.Toplevel):
         """
         ruta_json = self.ruta + ".json"
         try:
-            mover_a_directorio(self.ruta,
-                               ruta_json if os.path.isfile(ruta_json) else None,
-                               DIRECTORIO_DESCARTADOS)
+            nueva_ruta, _ = mover_a_directorio(self.ruta,
+                                               ruta_json if os.path.isfile(ruta_json) else None,
+                                               DIRECTORIO_DESCARTADOS)
         except OSError as e:
             self._error("Error",
                         f"No se pudo mover {self.ruta} a {DIRECTORIO_DESCARTADOS}.\n\n{e}")
             return False
+        log.info("Descartado: %s -> %s", self.ruta, nueva_ruta)
         self._avisar_database_modificada()
         self.destroy()
         return True

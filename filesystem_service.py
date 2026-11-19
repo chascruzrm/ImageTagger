@@ -1,9 +1,11 @@
 """Servicios de sistema de archivos: detección de archivos nuevos en un directorio."""
 
+import logging
 import os
 import shutil
-import sys
 import threading
+
+log = logging.getLogger(__name__)
 
 EXTENSIONES_IMAGEN = {".jpg", ".jpeg", ".png", ".gif"}
 
@@ -67,13 +69,19 @@ def nuevo_archivo_detectado(archivos, abrir_imagen):
             abrir_imagen(ruta)
 
 
+def _listar(directorio):
+    """Conjunto de rutas de archivos (no subdirectorios) del directorio. Lanza OSError."""
+    with os.scandir(directorio) as entradas:
+        return {e.path for e in entradas if e.is_file()}
+
+
 def listar_archivos(directorio):
-    """Devuelve el conjunto de rutas de archivos (no subdirectorios) del directorio."""
+    """Devuelve el conjunto de rutas de archivos (no subdirectorios) del directorio,
+    o None si no se puede leer (el error queda en el log)."""
     try:
-        with os.scandir(directorio) as entradas:
-            return {e.path for e in entradas if e.is_file()}
-    except OSError as e:
-        print(f"Error al leer '{directorio}': {e}", file=sys.stderr)
+        return _listar(directorio)
+    except OSError:
+        log.exception("No se pudo leer el directorio %s", directorio)
         return None
 
 
@@ -109,7 +117,7 @@ class MonitorDirectorio(threading.Thread):
     """
 
     def __init__(self, directorio, al_detectar, intervalo=1.0, incluir_existentes=False):
-        super().__init__(daemon=True)
+        super().__init__(daemon=True, name="MonitorDirectorio")
         self.directorio = directorio
         self.al_detectar = al_detectar
         self.intervalo = intervalo
@@ -131,10 +139,19 @@ class MonitorDirectorio(threading.Thread):
         return listos
 
     def run(self):
+        ultimo_error = None  # para no repetir el mismo error en el log cada segundo
         while not self._detener.wait(self.intervalo):
-            actuales = listar_archivos(self.directorio)
-            if actuales is None:
+            try:
+                actuales = _listar(self.directorio)
+            except OSError as e:
+                if str(e) != ultimo_error:
+                    log.error("No se pudo leer el directorio monitoreado %s: %s",
+                              self.directorio, e)
+                    ultimo_error = str(e)
                 continue
+            if ultimo_error is not None:
+                log.info("El directorio monitoreado %s vuelve a estar accesible", self.directorio)
+                ultimo_error = None
             nuevos = self._listos(actuales - self._conocidos)
             # Olvidar pendientes que se borraron antes de terminar de copiarse.
             for ruta in list(self._pendientes):
@@ -144,10 +161,11 @@ class MonitorDirectorio(threading.Thread):
             # archivo se borra y vuelve a crearse, se detecta de nuevo como nuevo).
             self._conocidos = (self._conocidos & actuales) | nuevos
             if nuevos:
+                log.info("Archivos nuevos: %s", ", ".join(os.path.basename(r) for r in sorted(nuevos)))
                 try:
                     self.al_detectar(sorted(nuevos))
-                except Exception as e:
-                    print(f"Error al procesar archivos nuevos: {e}", file=sys.stderr)
+                except Exception:
+                    log.exception("Error al procesar archivos nuevos")
 
     def detener(self):
         self._detener.set()

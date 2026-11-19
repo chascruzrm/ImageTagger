@@ -1,6 +1,7 @@
 # Imágenes procesadas y sus datos
 database/
 descartados/
+logs/
 
 # Configuración local (copiar config.example.ini a config.ini)
 config.ini
