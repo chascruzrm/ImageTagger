@@ -8,11 +8,11 @@ los archivos detectados en una cola y el thread principal (que corre el mainloop
 de Tk) la revisa periódicamente y llama a nuevo_archivo_detectado().
 """
 
-VERSION = "1.0.0 - 2026-11-18"
+VERSION = "1.0.2 - 2026-11-18"
 AUTOR = "Roberto Marcelo Chas Cruz"
 EMAIL = "chascruzrm2@gmail.com"
 LICENCE = "GPLv3"
-TITULO_APLICACION = f"ImageTagger v. {VERSION} - {AUTOR}"
+TITULO_APLICACION = f"ImageTagger v. {VERSION} - {AUTOR} - {EMAIL}"
 
 import configparser
 import os
