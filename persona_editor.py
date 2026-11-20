@@ -8,7 +8,10 @@ from tkinter import messagebox
 from PIL import Image, ImageOps, ImageTk
 from pydantic import ValidationError
 
-from app_config import DIRECTORIO_DATABASE, DIRECTORIO_DESCARTADOS, EVENTO_DATABASE_MODIFICADA
+from app_config import DIRECTORIO_DATABASE, DIRECTORIO_PAPELERA, EVENTO_DATABASE_MODIFICADA
+from autocompletado import Autocompletado
+from autocompletado_fuentes import (get_autocompletion_apellido, get_autocompletion_documento,
+                                    get_autocompletion_nombre)
 from filesystem_service import mover_a_directorio, mover_archivo, obtener_ruta_disponible
 from models import MAX_BYTES_NOTAS, MAX_CARACTERES, Persona
 
@@ -24,12 +27,13 @@ MARGEN = 10
 COLOR_ESTADO_MODIFICADO = "red"
 COLOR_ESTADO_ERROR = "red"
 COLOR_ESTADO_OK = "dark green"
+COLOR_BOTON_BORRAR = "red"
 
 
 def preguntar_si_guardar(padre):
-    """Diálogo modal con Cancelar / No guardar / Descartar / Guardar.
+    """Diálogo modal con Cancelar / No guardar / Borrar / Guardar.
 
-    Devuelve "cancelar", "no_guardar", "descartar" o "guardar".
+    Devuelve "cancelar", "no_guardar", "borrar" o "guardar".
     """
     if padre.state() == "iconic":
         padre.deiconify()
@@ -53,10 +57,12 @@ def preguntar_si_guardar(padre):
     botones = {}
     for texto, valor in (("Cancelar", "cancelar"),
                          ("No guardar", "no_guardar"),
-                         ("Descartar", "descartar"),
+                         ("Borrar", "borrar"),
                          ("Guardar", "guardar")):
         botones[valor] = tk.Button(marco_botones, text=texto, width=11,
                                    command=lambda v=valor: elegir(v))
+        if valor == "borrar":
+            botones[valor].config(fg=COLOR_BOTON_BORRAR, activeforeground=COLOR_BOTON_BORRAR)
         botones[valor].pack(side="left", padx=5)
 
     dlg.protocol("WM_DELETE_WINDOW", lambda: elegir("cancelar"))
@@ -156,12 +162,13 @@ class VentanaImagen(tk.Toplevel):
         marco_botones.grid(row=4, column=0, columnspan=5, sticky="e", pady=(10, 0))
         self.btGuardar = tk.Button(marco_botones, text="Guardar", width=10,
                                    command=self.guardar)
-        self.btDescartar = tk.Button(marco_botones, text="Descartar", width=10,
-                                     command=self.confirmar_descartar)
+        self.btBorrar = tk.Button(marco_botones, text="Borrar", width=10,
+                                  fg=COLOR_BOTON_BORRAR, activeforeground=COLOR_BOTON_BORRAR,
+                                  command=self.confirmar_borrar)
         self.btCerrar = tk.Button(marco_botones, text="Cerrar", width=10,
                                   command=self.cerrar)
         self.btGuardar.pack(side="left", padx=(0, 10))
-        self.btDescartar.pack(side="left", padx=(0, 10))
+        self.btBorrar.pack(side="left", padx=(0, 10))
         self.btCerrar.pack(side="left")
 
         # Estado: alto fijo de 2 líneas para que un mensaje largo no cambie el
@@ -169,6 +176,13 @@ class VentanaImagen(tk.Toplevel):
         self.lblEstado = tk.Label(form, text="", width=1, height=2, anchor="nw",
                                   justify="left", wraplength=620)
         self.lblEstado.grid(row=5, column=0, columnspan=5, sticky="ew", pady=(5, 0))
+
+        # Se crean al final para que la lista flotante quede sobre el formulario.
+        self._autocompletados = [
+            Autocompletado(self.txtApellido, get_autocompletion_apellido),
+            Autocompletado(self.txtNombre, get_autocompletion_nombre),
+            Autocompletado(self.txtDocumento, get_autocompletion_documento),
+        ]
 
     def _crear_entry(self, form, etiqueta, columna, vcmd):
         tk.Label(form, text=etiqueta).grid(row=0, column=columna, sticky="w")
@@ -480,8 +494,8 @@ class VentanaImagen(tk.Toplevel):
             if respuesta == "cancelar":
                 self.focus_force()
                 return
-            if respuesta == "descartar":
-                self.confirmar_descartar()
+            if respuesta == "borrar":
+                self.confirmar_borrar()
                 return
             if respuesta == "guardar" and not self.guardar():
                 return
@@ -533,35 +547,49 @@ class VentanaImagen(tk.Toplevel):
         except tk.TclError:  # la ventana se destruyó mientras tanto
             pass
 
-    def confirmar_descartar(self):
-        """Pide confirmación y, si el usuario acepta, llama a descartar().
+    def confirmar_borrar(self):
+        """Pide confirmación y, si el usuario acepta, llama a borrar().
 
-        Se llama desde btDescartar y desde la opción Descartar de preguntar_si_guardar.
+        Se llama desde btBorrar y desde la opción Borrar de preguntar_si_guardar.
         """
-        if messagebox.askyesno("Descartar imagen",
-                               "¿Está seguro de que desea descartar la imagen?\n\n"
-                               f"{self.ruta}",
+        # Nombre que tendrá en la papelera (borrar() agrega un sufijo si ya existe).
+        nombre = os.path.basename(obtener_ruta_disponible(DIRECTORIO_PAPELERA,
+                                                          os.path.basename(self.ruta)))
+        if os.path.isfile(self.ruta + ".json"):
+            detalle = ("La imagen y su archivo de datos se moverán a la carpeta de "
+                       f"imágenes borradas:\n\n{DIRECTORIO_PAPELERA}\n\n"
+                       "Para recuperarlos, mueva desde esa carpeta los archivos\n\n"
+                       f"{nombre}\n{nombre}.json\n\n"
+                       f"a la carpeta de la base de datos:\n\n{DIRECTORIO_DATABASE}")
+        else:
+            detalle = ("La imagen no tiene datos guardados. Se moverá a la carpeta de "
+                       f"imágenes borradas:\n\n{DIRECTORIO_PAPELERA}\n\n"
+                       f"Para recuperarla, mueva desde esa carpeta el archivo {nombre} "
+                       "a la carpeta monitoreada.")
+        if messagebox.askyesno("Borrar imagen",
+                               "¿Está seguro de que desea borrar la imagen?\n\n"
+                               f"{self.ruta}\n\n{detalle}",
                                icon="warning", default="no", parent=self):
-            self.descartar()
+            self.borrar()
         else:
             self.focus_force()
 
-    def descartar(self):
-        """Descarta la imagen self.ruta sin guardar los cambios y cierra la ventana.
+    def borrar(self):
+        """Borra la imagen self.ruta sin guardar los cambios y cierra la ventana.
 
-        Mueve la imagen a DIRECTORIO_DESCARTADOS (la carpeta se crea si no existe),
-        junto con su JSON si lo tiene. Devuelve True si se descartó.
+        Mueve la imagen a DIRECTORIO_PAPELERA (la carpeta se crea si no existe),
+        junto con su JSON si lo tiene. Devuelve True si se borró.
         """
         ruta_json = self.ruta + ".json"
         try:
             nueva_ruta, _ = mover_a_directorio(self.ruta,
                                                ruta_json if os.path.isfile(ruta_json) else None,
-                                               DIRECTORIO_DESCARTADOS)
+                                               DIRECTORIO_PAPELERA)
         except OSError as e:
             self._error("Error",
-                        f"No se pudo mover {self.ruta} a {DIRECTORIO_DESCARTADOS}.\n\n{e}")
+                        f"No se pudo mover {self.ruta} a {DIRECTORIO_PAPELERA}.\n\n{e}")
             return False
-        log.info("Descartado: %s -> %s", self.ruta, nueva_ruta)
+        log.info("Borrado: %s -> %s", self.ruta, nueva_ruta)
         self._avisar_database_modificada()
         self.destroy()
         return True

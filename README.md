@@ -2,7 +2,7 @@
 
 Aplicación de escritorio para **identificar a las personas que aparecen en imágenes**. Vigila una carpeta (por ejemplo, la de capturas de pantalla o la de fotos de una cámara) y, cada vez que aparece una imagen nueva, abre una ventana para cargar los datos de la persona: apellido, nombre, documento y notas. Las imágenes etiquetadas se archivan junto con sus datos y se pueden buscar, consultar y editar desde una galería.
 
-**Versión actual:** 1.0.3 - 2026-11-18 (constante `VERSION` de `main.py`)
+**Versión actual:** Está en la constante `VERSION` de `main.py`
 
 ---
 
@@ -33,16 +33,16 @@ Aplicación de escritorio para **identificar a las personas que aparecen en imá
  │ foto.jpg     │ ──nueva──▶  │ imagen + Apellido, Nombre, │ ────────▶ │ foto.jpg.json        │
  │ ...          │             │ Documento, Notas           │           └──────────────────────┘
  └──────────────┘             └────────────────────────────┘                    │
-                                     │ Descartar                                │ lista, búsqueda,
+                                     │ Borrar                                   │ lista, búsqueda,
                                      ▼                                          ▼ edición
-                              descartados/                              Galería (ventana principal)
+                              Borrados/                                 Galería (ventana principal)
 ```
 
 1. Al iniciar se abre la **galería**, maximizada: es la ventana principal.
 2. Un proceso en segundo plano revisa la **carpeta monitoreada** cada segundo, sin entrar en subcarpetas.
 3. Por cada imagen nueva (`.jpg`, `.jpeg`, `.png` o `.gif`) se abre un **editor**. Una imagen recién llegada se abre recién cuando terminó de copiarse. Las imágenes que ya estaban en la carpeta al iniciar también se abren, porque están pendientes de etiquetar.
 4. Al **guardar**, se escribe un archivo JSON con los datos y la imagen se mueve, junto con su JSON, a la carpeta `database`.
-5. Al **descartar**, la imagen (y su JSON, si lo tiene) se mueve a la carpeta `descartados`.
+5. Al **borrar**, la imagen (y su JSON, si lo tiene) se mueve a la carpeta `Borrados`.
 6. La galería lista todo lo que hay en `database`, permite buscar, ver cada imagen con sus datos y volver a editarlos.
 
 Como las imágenes procesadas salen de la carpeta monitoreada, todo lo que queda en ella está pendiente de procesar.
@@ -132,11 +132,14 @@ Contenido:
 [GENERAL]
 ; Directorio donde se buscan imágenes nuevas (sin recursividad).
 directorio_monitoreo = C:\Users\usuario\Pictures\Screenshots
+; Opcional. Directorio donde se guardan las imágenes procesadas con su JSON.
+directorio_database = database
 ```
 
 | Sección | Clave | Descripción |
 |---|---|---|
 | `[GENERAL]` | `directorio_monitoreo` | Ruta de la carpeta a monitorear. Puede tener espacios y acentos, sin comillas. La carpeta debe existir. |
+| `[GENERAL]` | `directorio_database` | Opcional. Carpeta donde se guardan las imágenes procesadas con su JSON. Una ruta absoluta se usa tal cual; una relativa se toma desde la carpeta de `main.py`. Si falta o está vacía, se usa `database` junto a `main.py`. Si la carpeta no existe, se crea al iniciar; si no se puede crear, se avisa y se usa `database` junto a `main.py`. Si no se puede escribir en la carpeta, se informa el error y la aplicación no arranca. |
 
 Notas:
 
@@ -199,7 +202,7 @@ El proyecto incluye `.vscode/settings.json` con `"code-runner.runInTerminal": tr
 |---|---|
 | **Buscar** | Filtra la lista mientras se escribe. Busca en apellido, nombre y documento, sin distinguir mayúsculas ni acentos ("perez" encuentra "PÉREZ"). |
 | **Buscar en notas** | Si está marcado, la búsqueda también incluye las notas. Desmarcado por defecto. |
-| **Actualizar** | Vuelve a leer los JSON de `database`. La lista también se actualiza sola al guardar o descartar desde un editor. |
+| **Actualizar** | Vuelve a leer los JSON de `database`. La lista también se actualiza sola al guardar o borrar desde un editor. |
 | **Lista** | Cada persona como `APELLIDO, NOMBRE (DOCUMENTO)`, en orden alfabético. Debajo se indica la cantidad de ítems mostrados. |
 | **Vista previa** | Al hacer clic en una persona se muestran su imagen, apellido, nombre, documento y notas. |
 | **Copiar** | Copia el documento al portapapeles. |
@@ -227,8 +230,8 @@ Botones:
 | Botón | Qué hace |
 |---|---|
 | **Guardar** | Valida los datos, escribe el JSON y mueve la imagen y su JSON a `database`. Si la imagen ya estaba en `database`, porque se abrió con *Editar*, solo actualiza su JSON. |
-| **Descartar** | Pide confirmación y mueve la imagen, y su JSON si lo tiene, a `descartados`. |
-| **Cerrar** | Cierra la ventana. Si hay datos sin guardar, pregunta: **Cancelar**, **No guardar**, **Descartar** o **Guardar**. |
+| **Borrar** (en rojo) | Pide confirmación y mueve la imagen, y su JSON si lo tiene, a `Borrados`. |
+| **Cerrar** | Cierra la ventana. Si hay datos sin guardar, pregunta: **Cancelar**, **No guardar**, **Borrar** o **Guardar**. |
 
 Al cerrar un editor pasa al frente el siguiente editor abierto, o la galería si no queda ninguno.
 
@@ -239,7 +242,7 @@ Las dos carpetas se crean automáticamente junto a `main.py` cuando hacen falta,
 | Carpeta | Contenido |
 |---|---|
 | `database/` | Imágenes etiquetadas y sus datos |
-| `descartados/` | Imágenes descartadas, con su JSON si lo tenían |
+| `Borrados/` | Imágenes borradas, con su JSON si lo tenían. Para recuperar una, mueva la imagen y su JSON a la carpeta de la base de datos. Se crea al iniciar; si no se puede escribir en ella, la aplicación informa el error y no arranca. |
 | `logs/` | Registro de la aplicación (`imagetagger.log`); ver [Registro de errores](#registro-de-errores-log) |
 
 **Nombre del archivo de datos:** es el nombre de la imagen con `.json` agregado, conservando la extensión original: `foto.jpg` → `foto.jpg.json`.
@@ -266,7 +269,7 @@ Se registra:
 
 | Nivel | Qué |
 |---|---|
-| INFO | Inicio y cierre (con versión de la aplicación y de Python), carpeta monitoreada, archivos nuevos detectados, imágenes guardadas y descartadas, y avisos de validación al guardar (por ejemplo, nombre vacío). |
+| INFO | Inicio y cierre (con versión de la aplicación y de Python), carpeta monitoreada, archivos nuevos detectados, imágenes guardadas y borradas, y avisos de validación al guardar (por ejemplo, nombre vacío). |
 | WARNING | Imágenes que no se pueden abrir y archivos de `database` que no se pueden leer. |
 | ERROR | Errores al guardar o mover archivos, errores de inicio (configuración), carpeta monitoreada inaccesible y errores inesperados, con el detalle técnico (traceback). |
 
@@ -293,7 +296,7 @@ Ejemplo:
 | `persona_editor.py` | Editor de los datos de una imagen y el diálogo de cambios sin guardar. |
 | `filesystem_service.py` | Monitoreo de la carpeta, nombres disponibles y movimiento de archivos. |
 | `models.py` | Modelo `Persona` (pydantic) con sus validaciones. |
-| `app_config.py` | Rutas (`database`, `descartados`, `logs`, `config.ini`), lectura de la configuración, configuración del log y fuente por defecto (Arial 12). |
+| `app_config.py` | Rutas (`database`, `Borrados`, `logs`, `config.ini`), lectura de la configuración, configuración del log y fuente por defecto (Arial 12). |
 | `iniciar.bat` | Lanzador para Windows. |
 | `config.example.ini` | Plantilla de configuración. |
 | `requirements.txt` | Dependencias con versiones exactas. |

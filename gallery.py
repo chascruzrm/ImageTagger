@@ -3,7 +3,6 @@ imagen y los datos de la seleccionada."""
 
 import logging
 import os
-import unicodedata
 from dataclasses import dataclass
 from functools import cached_property
 import tkinter as tk
@@ -16,6 +15,7 @@ from app_config import (ARCHIVO_LOG, DIRECTORIO_DATABASE, EVENTO_DATABASE_MODIFI
                         configurar_fuentes, configurar_log)
 from models import Persona
 from persona_editor import VentanaImagen
+from textos import normalizar
 
 log = logging.getLogger(__name__)
 
@@ -61,12 +61,6 @@ def texto_cantidad(cantidad):
     if cantidad == 1:
         return "1 ítem mostrado"
     return f"{cantidad} ítems mostrados"
-
-
-def normalizar(texto):
-    """Minúsculas y sin acentos, para buscar sin distinguir 'Pérez' de 'PEREZ'."""
-    sin_acentos = unicodedata.normalize("NFD", texto)
-    return "".join(c for c in sin_acentos if unicodedata.category(c) != "Mn").casefold()
 
 
 def cargar_registros(directorio):

@@ -8,7 +8,7 @@ los archivos detectados en una cola y el thread principal (que corre el mainloop
 de Tk) la revisa periódicamente y llama a nuevo_archivo_detectado().
 """
 
-VERSION = "1.0.3 - 2026-11-18"
+VERSION = "1.1.0"
 AUTOR = "Roberto Marcelo Chas Cruz"
 EMAIL = "chascruzrm2@gmail.com"
 LICENCE = "GPLv3"
@@ -22,7 +22,8 @@ import signal
 import sys
 from typing import NoReturn
 
-from app_config import ARCHIVO_LOG, configurar_log, leer_directorio_monitoreo
+from app_config import (ARCHIVO_LOG, AVISO_DATABASE, DIRECTORIO_DATABASE, DIRECTORIO_PAPELERA,
+                        configurar_log, leer_directorio_monitoreo, verificar_escritura)
 from filesystem_service import MonitorDirectorio, nuevo_archivo_detectado
 from gallery import Galeria
 from persona_editor import VentanaImagen
@@ -46,22 +47,36 @@ def salir(root):
     root.quit()
 
 
-def error_de_inicio(mensaje) -> NoReturn:
-    """Informa un error que impide iniciar y termina el programa.
+def _dialogo_de_inicio(mensaje, advertencia=False):
+    """Muestra `mensaje` en un cuadro de diálogo antes de que exista la galería.
 
-    Se registra en el log y se muestra en un cuadro de diálogo porque,
-    ejecutado con pythonw (sin consola), lo que se imprime no lo ve nadie.
+    Se usa un diálogo porque, ejecutado con pythonw (sin consola), lo que se
+    imprime no lo ve nadie.
     """
-    log.error("No se pudo iniciar: %s", " ".join(mensaje.split()))
     try:
         import tkinter as tk
         from tkinter import messagebox
         raiz = tk.Tk()
         raiz.withdraw()
-        messagebox.showerror(TITULO_APLICACION, mensaje, parent=raiz)
+        if advertencia:
+            messagebox.showwarning(TITULO_APLICACION, mensaje, parent=raiz)
+        else:
+            messagebox.showerror(TITULO_APLICACION, mensaje, parent=raiz)
         raiz.destroy()
     except Exception:
         pass
+
+
+def aviso_de_inicio(mensaje):
+    """Informa un problema que no impide iniciar (se registra en el log)."""
+    log.warning("%s", " ".join(mensaje.split()))
+    _dialogo_de_inicio(mensaje, advertencia=True)
+
+
+def error_de_inicio(mensaje) -> NoReturn:
+    """Informa un error que impide iniciar (se registra en el log) y termina el programa."""
+    log.error("No se pudo iniciar: %s", " ".join(mensaje.split()))
+    _dialogo_de_inicio(mensaje)
     sys.exit(1)
 
 
@@ -77,6 +92,21 @@ def main():
     if not os.path.isdir(directorio):
         error_de_inicio(f"El directorio a monitorear no existe:\n\n{directorio}\n\n"
                         "Revise 'directorio_monitoreo' en config.ini.")
+
+    if AVISO_DATABASE:
+        aviso_de_inicio(AVISO_DATABASE)
+    log.info("Directorio database: %s", DIRECTORIO_DATABASE)
+    try:
+        verificar_escritura(DIRECTORIO_DATABASE)
+    except OSError as e:
+        error_de_inicio(f"No se puede escribir en la carpeta de la base de datos:\n\n"
+                        f"{DIRECTORIO_DATABASE}\n\n{e}")
+    try:
+        os.makedirs(DIRECTORIO_PAPELERA, exist_ok=True)
+        verificar_escritura(DIRECTORIO_PAPELERA)
+    except OSError as e:
+        error_de_inicio(f"No se puede escribir en la carpeta de imágenes borradas:\n\n"
+                        f"{DIRECTORIO_PAPELERA}\n\n{e}")
 
     # La galería es la ventana principal; las de cada imagen se abren como hijas.
     root = Galeria()
